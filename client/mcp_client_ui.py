@@ -6,6 +6,7 @@ import datetime
 import nest_asyncio
 from PIL import Image, ImageOps, ImageDraw
 from streamlit.components.v1 import html
+from mcp_client_stdio import run_agent
 
 # Allow asyncio event loop reuse (Streamlit apps rerun on input changes)
 nest_asyncio.apply()
@@ -22,6 +23,8 @@ def load_css():
 load_css()
 
 # ===========================  Initialization =============================
+conversations_dir = 'conversations'
+
 if 'conversation' not in st.session_state:
     st.session_state.conversations = []
 
@@ -94,7 +97,6 @@ with st.sidebar:
 
     # Chat history list
     st.markdown("### History")
-    conversations_dir = 'conversations'
     os.makedirs(conversations_dir, exist_ok=True)
     conversation_files = os.listdir(conversations_dir)
 
@@ -142,4 +144,76 @@ def submit_on_enter():
         st.session_state.pending_query = st.session_state.query_input
 
 
-st.text_input('Message Deepseek')
+st.text_input(
+    'Message Deepseek',
+    key='query_input',
+    placeholder='Message Deepseek',
+    on_change=submit_on_enter
+)
+
+send_button = st.button('Send')
+new_conv_button = st.button('\U0001F4DD New Conversation')
+save_conv_button = st.button('\U0001F4BE Save Conversation')
+
+
+# =============================== Query Handling ================================
+async def process_query_stdio(query: str) -> str:
+    add_log('Processing query')
+    result = await run_agent(query)
+    add_log('Query Processed')
+    return result
+
+async def handle_query(query: str):
+    if query.strip().lower() == 'quit':
+        st.session_state.conversation = []
+        add_log('Conversation reset')
+    else:
+        user_ts = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        st.session_state.conversation.append(
+            {
+                'sender': 'User',
+                'message': query,
+                'timestamp': user_ts
+            }
+        )
+        add_log(f'User query appended: {query}')
+        response_text = await process_query_stdio(query)
+        st.session_state.conversation.append(
+            {
+                'sender': 'MCP',
+                'message': response_text,
+                'timestamp': datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            }
+        )
+        add_log('MCP response appended to conversation')
+        st.session_state.query_executed = True
+
+# ==================================== Main Trigger Logic ==============================
+
+# Check for send button or enter key press
+if (send_button or st.session_state.submit_triggered) and not st.session_state.query_executed:
+    query = st.session_state.pending_query.strip()
+    if query:
+        run_async_in_event_loop(handle_query(query))
+        st.session_state.submit_triggered = False
+
+# Rerun app after query complete to refresh the UI
+if st.session_state.query_executed:
+    st.session_state.query_executed = False
+    st.rerun()
+
+# New Conversation
+if new_conv_button:
+    st.session_state.conversation = []
+    add_log('New conversation started')
+    st.rerun()
+
+# Save Conversation
+if save_conv_button:
+    os.makedirs(conversations_dir, exist_ok=True)
+    filename = {f"conversation_{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}.json"}
+    filepath = os.path.join(conversations_dir, filename)
+    with open(filepath, 'w') as f:
+        json.dump(st.session_state.conversation, f, indent=2)
+    add_log(f'Conversation saved as {filename}')
+    st.success(f'Conversation saved as {filename}')
