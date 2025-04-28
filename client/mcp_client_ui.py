@@ -10,16 +10,18 @@ from streamlit.components.v1 import html
 # Allow asyncio event loop reuse (Streamlit apps rerun on input changes)
 nest_asyncio.apply()
 
+
 # Function to load external CSS from static folder
 def load_css():
     css_file = os.path.join(os.path.dirname(__file__), "static", "styles.css")
     with open(css_file) as f:
         st.markdown(f'<style>{f.read()}</style>', unsafe_allow_html=True)
 
+
 # Call the function
 load_css()
 
-# =========================== Session Init =============================
+# ===========================  Initialization =============================
 if 'conversation' not in st.session_state:
     st.session_state.conversations = []
 
@@ -109,5 +111,35 @@ with st.sidebar:
     else:
         st.info('No saved conversations found')
 
-    with st.expander('Log Output'):
-        st.text_area('Logs', '\n'.join(st.session_state.logs), height=200)
+# ============================== Main Chat UI ====================================
+col1, col2 = st.columns([1, 6])
+with col1:
+    logo = Image.open('static/deepseek-color.png')
+    # size = min(logo.size)
+    # mask = Image.new('L', (size, size), 0)
+    # draw = ImageDraw.Draw(mask)
+    # draw.ellipse((0, 0, size, size), fill=255)
+    # circular_logo = ImageOps.fit(logo, (size, size), centering=(0.5, 0.5))
+    # circular_logo.putalpha(mask)
+    st.image(logo, use_container_width=True)
+
+with col2:
+    st.title("Hi, I'm Deepseek.")
+    st.markdown('How can I help you today?', unsafe_allow_html=True)
+
+# Show past conversations
+for msg in st.session_state.conversations:
+    timestamp = msg.get('timestamp', '')
+    sender = msg.get('sender', '')
+    message = msg.get('message', '')
+    st.markdown(f'**[{timestamp}] {sender}: ** {message}')
+
+
+# Set the submit_triggered flag when nter is pressed
+def submit_on_enter():
+    if st.session_state.query_input.strip():
+        st.session_state.submit_triggered = True
+        st.session_state.pending_query = st.session_state.query_input
+
+
+st.text_input('Message Deepseek')
