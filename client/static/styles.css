@@ -1,0 +1,91 @@
+/* styles.css */
+
+/* Main colors */
+:root {
+    --primary: #4f46e5;
+    --secondary: #6366f1;
+    --background: #f9fafb;
+    --card: #ffffff;
+    --text: #111827;
+    --text-secondary: #6b7280;
+}
+
+/* Main container */
+.stApp {
+    background-color: var(--background);
+}
+
+/* Sidebar */
+[data-testid="stSidebar"] {
+    background-color: var(--card) !important;
+    border-right: 1px solid #e5e7eb;
+}
+
+/* Sidebar containers */
+.sidebar-container {
+    padding: 1rem;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+/* Headers */
+h1, h2, h3 {
+    color: var(--text) !important;
+}
+
+/* Buttons */
+.stButton>button {
+    background-color: var(--primary) !important;
+    color: white !important;
+    border-radius: 8px !important;
+    padding: 8px 16px !important;
+    border: none !important;
+}
+
+.stButton>button:hover {
+    background-color: var(--secondary) !important;
+}
+
+/* Text input */
+.stTextInput>div>div>input {
+    border-radius: 8px !important;
+    border: 1px solid #e5e7eb !important;
+}
+
+/* Cards */
+.stMetric {
+    background-color: var(--card) !important;
+    border-radius: 12px !important;
+    padding: 16px !important;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1) !important;
+}
+
+/* Tabs */
+[data-baseweb="tab-list"] {
+    gap: 8px !important;
+}
+
+[data-baseweb="tab"] {
+    padding: 8px 16px !important;
+    border-radius: 8px !important;
+}
+
+[aria-selected="true"] {
+    background-color: var(--primary) !important;
+    color: white !important;
+}
+
+/* Chat history items */
+.chat-history-item {
+    padding: 8px 12px;
+    margin: 4px 0;
+    border-radius: 8px;
+    cursor: pointer;
+}
+
+.chat-history-item:hover {
+    background-color: #f3f4f6;
+}
+
+.chat-history-item.active {
+    background-color: #e0e7ff;
+}
