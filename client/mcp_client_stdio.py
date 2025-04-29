@@ -1,2 +1,2 @@
-def run_agent():
-	pass
+def run_agent(query):
+	return query

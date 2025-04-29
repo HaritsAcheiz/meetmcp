@@ -18,9 +18,22 @@ services:
       retries: 3
       start_period: 30s
     entrypoint: ["./entrypoint.sh"]
+  n8n:
+    image: n8nio/n8n:1.90.0
+    restart: always
+    ports:
+      - 5678:5678
+    environment:
+      - N8N_PORT=5678
+      - NODE_ENV=production
+      - GENERIC_TIMEZONE=${GENERIC_TIMEZONE}
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./local_files:/files
 
 volumes:
   mcp_client:
+  n8n_data:
 
 networks:
   default:

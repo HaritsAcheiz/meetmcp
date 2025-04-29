@@ -8,8 +8,19 @@ from PIL import Image, ImageOps, ImageDraw
 from streamlit.components.v1 import html
 from mcp_client_stdio import run_agent
 
-# Allow asyncio event loop reuse (Streamlit apps rerun on input changes)
-nest_asyncio.apply()
+# =========================== Function Definition =========================
+
+
+# runasync event loop
+def run_async_in_event_loop(coro):
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        return loop.run_until_complete(coro)
+    future = asyncio.run_coroutine_threadsafe(coro, loop)
+    return future.result()
 
 
 # Function to load external CSS from static folder
@@ -19,13 +30,68 @@ def load_css():
         st.markdown(f'<style>{f.read()}</style>', unsafe_allow_html=True)
 
 
-# Call the function
-load_css()
+# Log
+def add_log(message: str):
+    timestamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    log_message = f'{timestamp} - {message}'
+    st.session_state.logs.append(log_message)
+    print(log_message)
+
+
+# Query Processing
+async def process_query_stdio(query: str) -> str:
+    add_log('Processing query')
+    result = await run_agent(query)
+    add_log('Query Processed')
+    return result
+
+
+# Query Handling
+async def handle_query(query: str):
+    if query.strip().lower() == 'quit':
+        st.session_state.conversations = []
+        add_log('Conversation reset')
+    else:
+        user_ts = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        st.session_state.conversations.append(
+            {
+                'sender': 'User',
+                'message': query,
+                'timestamp': user_ts
+            }
+        )
+        add_log(f'User query appended: {query}')
+        response_text = await process_query_stdio(query)
+        st.session_state.conversations.append(
+            {
+                'sender': 'MCP',
+                'message': response_text,
+                'timestamp': datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            }
+        )
+        add_log('MCP response appended to conversation')
+        st.session_state.query_executed = True
+
+
+# Set the submit_triggered flag when nter is pressed
+def submit_on_enter():
+    if st.session_state.query_input.strip():
+        st.session_state.submit_triggered = True
+        st.session_state.pending_query = st.session_state.query_input
+
 
 # ===========================  Initialization =============================
+# Allow asyncio event loop reuse (Streamlit apps rerun on input changes)
+nest_asyncio.apply()
+
+# load css
+load_css()
+
+# Set Parameters
 conversations_dir = 'conversations'
 
-if 'conversation' not in st.session_state:
+# Set session state
+if 'conversations' not in st.session_state:
     st.session_state.conversations = []
 
 if 'client_config' not in st.session_state:
@@ -47,35 +113,21 @@ if 'query_executed' not in st.session_state:
     st.session_state.query_executed = False
 
 if 'pending_query' not in st.session_state:
-    st.session_state.pending_query = ''
+    st.session_state.pending_query = None
+
+if 'active_chat' not in st.session_state:
+    st.session_state.active_chat = None
 
 
-# ========================= Utility Function ============================
-def run_async_in_event_loop(coro):
-    try:
-        loop = asyncio.get_running_loop()
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        return loop.run_until_complete(coro)
-    future = asyncio.run_coroutine_threadsafe(coro, loop)
-    return future.result()
+# ============================= UI ==================================
 
 
-# ============================== Log ====================================
-def add_log(message: str):
-    timestamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    log_message = f'{timestamp} - {message}'
-    st.session_state.logs.append(log_message)
-    print(log_message)
-
-
-# ============================= Sidebar ==================================
+# Sidebar
 with st.sidebar:
-    st.image('static/deepseek-color.svg', width=300)
+    st.image('static/deepseek-color.svg', width=250)
 
     st.session_state.client_config['client_type'] = "STDIO"
-    add_log(f'Client type set to STDIO')
+    add_log('Client type set to STDIO')
 
     config_path = 'config.json'
     if os.path.exists(config_path):
@@ -85,14 +137,21 @@ with st.sidebar:
         add_log('Config is not found')
 
     # New Chat button
-    if st.button("New Chat", use_container_width=True, key="new_chat"):
-        new_chat_id = f"chat_{len(st.session_state.chat_history) + 1}"
-        st.session_state.chat_history.append({
-            "id": new_chat_id,
-            "title": f"Chat {len(st.session_state.chat_history) + 1}",
-            "messages": []
-        })
-        st.session_state.active_chat = new_chat_id
+    new_conv_button = st.button('New Chat', use_container_width=True, key="new_chat")
+    if new_conv_button:
+        # Auto-save current conversation if it exists
+        if st.session_state.get('conversations'):
+            os.makedirs(conversations_dir, exist_ok=True)
+            filename = {f"conversation_{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}.json"}
+            filepath = os.path.join(conversations_dir, filename)
+
+            with open(filepath, 'w') as f:
+                json.dump(st.session_state.conversations, f, indent=2)
+            add_log(f"Auto-saved conversation as {filename}")
+
+        # Start fresh conversation
+        st.session_state.conversations = []
+        add_log('New conversation started')
         st.rerun()
 
     # Chat history list
@@ -113,35 +172,38 @@ with st.sidebar:
     else:
         st.info('No saved conversations found')
 
-# ============================== Main Chat UI ====================================
+# Main
 col1, col2 = st.columns([1, 6])
+
+# Logo
 with col1:
     logo = Image.open('static/deepseek-color.png')
-    # size = min(logo.size)
-    # mask = Image.new('L', (size, size), 0)
-    # draw = ImageDraw.Draw(mask)
-    # draw.ellipse((0, 0, size, size), fill=255)
-    # circular_logo = ImageOps.fit(logo, (size, size), centering=(0.5, 0.5))
-    # circular_logo.putalpha(mask)
     st.image(logo, use_container_width=True)
 
+# Greeting
 with col2:
     st.title("Hi, I'm Deepseek.")
     st.markdown('How can I help you today?', unsafe_allow_html=True)
 
 # Show past conversations
-for msg in st.session_state.conversations:
+# for msg in st.session_state.conversations:
+#     timestamp = msg.get('timestamp', '')
+#     sender = msg.get('sender', '')
+#     message = msg.get('message', '')
+#     st.markdown(f'**[{timestamp}] {sender}: ** {message}')
+# Filter messages for the active chat
+active_messages = []
+for conv in st.session_state.conversations:
+    if conv["id"] == st.session_state.active_chat:
+        active_messages = conv["messages"]
+        break
+
+# Display only active messages
+for msg in active_messages:
     timestamp = msg.get('timestamp', '')
     sender = msg.get('sender', '')
     message = msg.get('message', '')
     st.markdown(f'**[{timestamp}] {sender}: ** {message}')
-
-
-# Set the submit_triggered flag when nter is pressed
-def submit_on_enter():
-    if st.session_state.query_input.strip():
-        st.session_state.submit_triggered = True
-        st.session_state.pending_query = st.session_state.query_input
 
 
 st.text_input(
@@ -152,41 +214,6 @@ st.text_input(
 )
 
 send_button = st.button('Send')
-new_conv_button = st.button('\U0001F4DD New Conversation')
-save_conv_button = st.button('\U0001F4BE Save Conversation')
-
-
-# =============================== Query Handling ================================
-async def process_query_stdio(query: str) -> str:
-    add_log('Processing query')
-    result = await run_agent(query)
-    add_log('Query Processed')
-    return result
-
-async def handle_query(query: str):
-    if query.strip().lower() == 'quit':
-        st.session_state.conversation = []
-        add_log('Conversation reset')
-    else:
-        user_ts = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        st.session_state.conversation.append(
-            {
-                'sender': 'User',
-                'message': query,
-                'timestamp': user_ts
-            }
-        )
-        add_log(f'User query appended: {query}')
-        response_text = await process_query_stdio(query)
-        st.session_state.conversation.append(
-            {
-                'sender': 'MCP',
-                'message': response_text,
-                'timestamp': datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            }
-        )
-        add_log('MCP response appended to conversation')
-        st.session_state.query_executed = True
 
 # ==================================== Main Trigger Logic ==============================
 
@@ -201,19 +228,3 @@ if (send_button or st.session_state.submit_triggered) and not st.session_state.q
 if st.session_state.query_executed:
     st.session_state.query_executed = False
     st.rerun()
-
-# New Conversation
-if new_conv_button:
-    st.session_state.conversation = []
-    add_log('New conversation started')
-    st.rerun()
-
-# Save Conversation
-if save_conv_button:
-    os.makedirs(conversations_dir, exist_ok=True)
-    filename = {f"conversation_{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}.json"}
-    filepath = os.path.join(conversations_dir, filename)
-    with open(filepath, 'w') as f:
-        json.dump(st.session_state.conversation, f, indent=2)
-    add_log(f'Conversation saved as {filename}')
-    st.success(f'Conversation saved as {filename}')
