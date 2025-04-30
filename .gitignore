@@ -1,4 +1,5 @@
 .venv/
+/conversation
 .env
 .python-version
 pyproject.toml
