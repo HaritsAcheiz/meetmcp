@@ -1,5 +1,5 @@
 .venv/
-conversation/
+client/conversations/
 .env
 .python-version
 pyproject.toml
