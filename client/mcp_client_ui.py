@@ -3,7 +3,7 @@ import asyncio
 import os
 import json
 import datetime
-import nest_asyncio
+# import nest_asyncio
 from PIL import Image, ImageOps, ImageDraw
 from streamlit.components.v1 import html
 import requests
@@ -15,15 +15,15 @@ load_dotenv('../.env')
 
 
 # runasync event loop
-def run_async_in_event_loop(coro):
-    try:
-        loop = asyncio.get_running_loop()
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        return loop.run_until_complete(coro)
-    future = asyncio.run_coroutine_threadsafe(coro, loop)
-    return future.result()
+# def run_async_in_event_loop(coro):
+#     try:
+#         loop = asyncio.get_running_loop()
+#     except RuntimeError:
+#         loop = asyncio.new_event_loop()
+#         asyncio.set_event_loop(loop)
+#         return loop.run_until_complete(coro)
+#     future = asyncio.run_coroutine_threadsafe(coro, loop)
+#     return future.result()
 
 
 # Function to load external CSS from static folder
@@ -42,11 +42,36 @@ def add_log(message: str):
 
 
 # Replace the process_query_stdio function with:
-async def process_query_n8n(query: str) -> str:
+# async def process_query_n8n(query: str) -> str:
+#     add_log('Sending query to n8n workflow')
+#     try:
+#         response = requests.post(
+#             os.getenv('N8N_WEBHOOK_HOST'),
+#             json={
+#                 "message": query,
+#                 "context": st.session_state.get("context", {}),
+#                 "conversation_id": st.session_state.active_chat
+#             },
+#             timeout=30
+#         )
+#         response.raise_for_status()
+#         result = response.json()
+#         add_log('Received response from n8n')
+
+#         # Store any context returned from n8n
+#         if 'output' in result[0]:
+#             st.session_state.context = result[0]['output']
+
+#         return result[0].get('output', 'No response received')
+#     except Exception as e:
+#         add_log(f'Error calling n8n: {str(e)}')
+#         return "Sorry, I encountered an error processing your request."
+
+def process_query_n8n(query: str) -> str:
     add_log('Sending query to n8n workflow')
     try:
         response = requests.post(
-            os.getenv('N8N_WEBHOOK_TEST_HOST'),
+            os.getenv('N8N_WEBHOOK_HOST'),
             json={
                 "message": query,
                 "context": st.session_state.get("context", {}),
@@ -58,7 +83,6 @@ async def process_query_n8n(query: str) -> str:
         result = response.json()
         add_log('Received response from n8n')
 
-        # Store any context returned from n8n
         if 'output' in result[0]:
             st.session_state.context = result[0]['output']
 
@@ -68,14 +92,51 @@ async def process_query_n8n(query: str) -> str:
         return "Sorry, I encountered an error processing your request."
 
 
-async def handle_query(query: str):
+# async def handle_query(query: str):
+#     if query.strip().lower() == 'quit':
+#         st.session_state.conversations = {'default': []}
+#         st.session_state.context = {}
+#         st.session_state.active_chat = 'default'
+#         add_log('Conversation and context reset')
+#     else:
+#         # Store user message with additional metadata
+#         user_ts = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+#         user_msg = {
+#             'sender': 'User',
+#             'message': query,
+#             'timestamp': user_ts,
+#             'type': 'user_message'
+#         }
+
+#         # Initialize if not exists
+#         if st.session_state.active_chat not in st.session_state.conversations:
+#             st.session_state.conversations[st.session_state.active_chat] = {'default': []}
+
+#         # Add message to current conversation
+#         st.session_state.conversations[st.session_state.active_chat].append(user_msg)
+#         add_log(f'User query appended: {query}')
+
+#         # Rest of your handle_query logic...
+#         response_data = await process_query_n8n(query)
+
+#         # When adding the response:
+#         assistant_msg = {
+#             'sender': 'Assistant',
+#             'message': response_data.get('text', '') if isinstance(response_data, dict) else response_data,
+#             'timestamp': datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+#             'type': 'response'
+#         }
+#         st.session_state.conversations[st.session_state.active_chat].append(assistant_msg)
+
+#         st.session_state.query_executed = True
+
+def handle_query(query: str):
     if query.strip().lower() == 'quit':
         st.session_state.conversations = {'default': []}
         st.session_state.context = {}
         st.session_state.active_chat = 'default'
         add_log('Conversation and context reset')
     else:
-        # Store user message with additional metadata
         user_ts = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         user_msg = {
             'sender': 'User',
@@ -84,18 +145,15 @@ async def handle_query(query: str):
             'type': 'user_message'
         }
 
-        # Initialize if not exists
         if st.session_state.active_chat not in st.session_state.conversations:
-            st.session_state.conversations[st.session_state.active_chat] = {'default': []}
+            st.session_state.conversations[st.session_state.active_chat] = []
 
-        # Add message to current conversation
         st.session_state.conversations[st.session_state.active_chat].append(user_msg)
+        st.session_state.conversation_modified = True
         add_log(f'User query appended: {query}')
 
-        # Rest of your handle_query logic...
-        response_data = await process_query_n8n(query)
+        response_data = process_query_n8n(query)  # Now synchronous
 
-        # When adding the response:
         assistant_msg = {
             'sender': 'Assistant',
             'message': response_data.get('text', '') if isinstance(response_data, dict) else response_data,
@@ -103,7 +161,6 @@ async def handle_query(query: str):
             'type': 'response'
         }
         st.session_state.conversations[st.session_state.active_chat].append(assistant_msg)
-
         st.session_state.query_executed = True
 
 
@@ -112,11 +169,12 @@ def submit_on_enter():
     if st.session_state.query_input.strip():
         st.session_state.submit_triggered = True
         st.session_state.pending_query = st.session_state.query_input
+        st.session_state.query_input = ""
 
 
 # ===========================  Initialization =============================
 # Allow asyncio event loop reuse (Streamlit apps rerun on input changes)
-nest_asyncio.apply()
+# nest_asyncio.apply()
 
 # load css
 load_css()
@@ -155,6 +213,9 @@ if 'context' not in st.session_state:
         'conversation_history': []
     }
 
+if 'conversation_modified' not in st.session_state:
+    st.session_state.conversation_modified = False
+
 # ============================= UI ==================================
 
 
@@ -165,21 +226,23 @@ with st.sidebar:
     # New Chat button
     new_conv_button = st.button('New Chat', use_container_width=True, key="new_chat")
     if new_conv_button:
-        # Auto-save current conversation if it exists
-        if st.session_state.get('conversations'):
-            os.makedirs(conversations_dir, exist_ok=True)
-            filename = f"conversation_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.json"
-            filepath = os.path.join(conversations_dir, filename)
+        if st.session_state.conversation_modified:
+            # Auto-save current conversation if it exists
+            if st.session_state.get('conversations'):
+                os.makedirs(conversations_dir, exist_ok=True)
+                filename = f"conversation_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.json"
+                filepath = os.path.join(conversations_dir, filename)
 
-            with open(filepath, 'w') as f:
-                json.dump(st.session_state.conversations, f, indent=2)
-            add_log(f"Auto-saved conversation as {filename}")
+                with open(filepath, 'w') as f:
+                    json.dump(st.session_state.conversations, f, indent=2)
+                add_log(f"Auto-saved conversation as {filename}")
 
-        # Start fresh conversation
-        st.session_state.conversations = {'default': []}
-        st.session_state.context = {}
-        add_log('New conversation started')
-        st.rerun()
+            # Start fresh conversation
+            st.session_state.conversations = {'default': []}
+            st.session_state.context = {}
+            st.session_state.conversation_modified = False
+            add_log('New conversation started')
+            st.rerun()
 
     # Chat history list
     st.markdown("### History")
@@ -263,10 +326,16 @@ send_button = st.button('Send')
 # ==================================== Main Trigger Logic ==============================
 
 # Check for send button or enter key press
+# if (send_button or st.session_state.submit_triggered) and not st.session_state.query_executed:
+#     query = st.session_state.pending_query.strip()
+#     if query:
+#         run_async_in_event_loop(handle_query(query))
+#         st.session_state.submit_triggered = False
+
 if (send_button or st.session_state.submit_triggered) and not st.session_state.query_executed:
     query = st.session_state.pending_query.strip()
     if query:
-        run_async_in_event_loop(handle_query(query))
+        handle_query(query)
         st.session_state.submit_triggered = False
 
 # Rerun app after query complete to refresh the UI
