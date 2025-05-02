@@ -4,3 +4,5 @@ client/conversations/
 .python-version
 pyproject.toml
 uv.lock
+notes.txt
+ksnip*.png

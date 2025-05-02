@@ -71,7 +71,7 @@ def process_query_n8n(query: str) -> str:
     add_log('Sending query to n8n workflow')
     try:
         response = requests.post(
-            os.getenv('N8N_WEBHOOK_HOST'),
+            os.getenv('N8N_WEBHOOK_TEST_HOST'),
             json={
                 "message": query,
                 "context": st.session_state.get("context", {}),
