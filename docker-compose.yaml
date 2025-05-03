@@ -19,17 +19,19 @@ services:
       start_period: 30s
     entrypoint: ["./entrypoint.sh"]
   n8n:
-    image: n8nio/n8n:1.90.0
+    image: n8nio/n8n:docker
     restart: always
     ports:
       - 5678:5678
     environment:
       - N8N_PORT=5678
-      - NODE_ENV=production
       - GENERIC_TIMEZONE=${GENERIC_TIMEZONE}
+      - N8N_COMMUNITY_PACKAGES_ALLOW_TOOL_USAGE=true
+      - N8N_RUNNERS_ENABLED=true
+      - N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=true
     volumes:
       - n8n_data:/home/node/.n8n
-      - ./local_files:/files
+      - /var/run/docker.sock:/var/run/docker.sock
 
 volumes:
   mcp_client:
