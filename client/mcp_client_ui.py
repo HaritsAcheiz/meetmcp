@@ -8,22 +8,11 @@ from PIL import Image, ImageOps, ImageDraw
 from streamlit.components.v1 import html
 import requests
 from dotenv import load_dotenv
+from uuid import uuid4
 
 load_dotenv('../.env')
 
 # =========================== Function Definition =========================
-
-
-# runasync event loop
-# def run_async_in_event_loop(coro):
-#     try:
-#         loop = asyncio.get_running_loop()
-#     except RuntimeError:
-#         loop = asyncio.new_event_loop()
-#         asyncio.set_event_loop(loop)
-#         return loop.run_until_complete(coro)
-#     future = asyncio.run_coroutine_threadsafe(coro, loop)
-#     return future.result()
 
 
 # Function to load external CSS from static folder
@@ -41,12 +30,11 @@ def add_log(message: str):
     print(log_message)
 
 
-# Replace the process_query_stdio function with:
-# async def process_query_n8n(query: str) -> str:
+# def process_query_n8n(query: str) -> str:
 #     add_log('Sending query to n8n workflow')
 #     try:
 #         response = requests.post(
-#             os.getenv('N8N_WEBHOOK_HOST'),
+#             os.getenv('N8N_WEBHOOK_TEST_HOST'),
 #             json={
 #                 "message": query,
 #                 "context": st.session_state.get("context", {}),
@@ -58,7 +46,6 @@ def add_log(message: str):
 #         result = response.json()
 #         add_log('Received response from n8n')
 
-#         # Store any context returned from n8n
 #         if 'output' in result[0]:
 #             st.session_state.context = result[0]['output']
 
@@ -67,26 +54,37 @@ def add_log(message: str):
 #         add_log(f'Error calling n8n: {str(e)}')
 #         return "Sorry, I encountered an error processing your request."
 
+
 def process_query_n8n(query: str) -> str:
     add_log('Sending query to n8n workflow')
     try:
+        # Generate or use existing session ID
+        if 'sessionId' not in st.session_state:
+            st.session_state.sessionId = str(uuid4()).replace("-", "")[:32]
+
+        # Create the new payload structure
+        payload = [{
+            "sessionId": st.session_state.sessionId,
+            "action": "sendMessage",
+            "chatInput": query
+        }]
+
+        add_log(f"Sending payload: {json.dumps(payload, indent=2)}")
+
         response = requests.post(
             os.getenv('N8N_WEBHOOK_TEST_HOST'),
-            json={
-                "message": query,
-                "context": st.session_state.get("context", {}),
-                "conversation_id": st.session_state.active_chat
-            },
+            json=payload,  # Send the new format
             timeout=30
         )
         response.raise_for_status()
         result = response.json()
-        add_log('Received response from n8n')
+        add_log(f'Received response: {json.dumps(result, indent=2)}')
 
-        if 'output' in result[0]:
-            st.session_state.context = result[0]['output']
+        # Handle response - adjust based on your n8n's return format
+        if isinstance(result, list) and len(result) > 0:
+            return result[0].get('output', result[0].get('response', 'No response received'))
+        return str(result)
 
-        return result[0].get('output', 'No response received')
     except Exception as e:
         add_log(f'Error calling n8n: {str(e)}')
         return "Sorry, I encountered an error processing your request."
@@ -206,12 +204,15 @@ if 'pending_query' not in st.session_state:
 if 'active_chat' not in st.session_state:
     st.session_state.active_chat = 'default'
 
-if 'context' not in st.session_state:
-    st.session_state.context = {
-        'data_catalog_queries': [],
-        'selected_models': {},
-        'conversation_history': []
-    }
+# if 'context' not in st.session_state:
+#     st.session_state.context = {
+#         'data_catalog_queries': [],
+#         'selected_models': {},
+#         'conversation_history': []
+#     }
+
+if 'sessionId' not in st.session_state:
+    st.session_state.sessionId = str(uuid4()).replace("-", "")[:32]
 
 if 'conversation_modified' not in st.session_state:
     st.session_state.conversation_modified = False
