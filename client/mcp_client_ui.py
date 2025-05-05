@@ -1,16 +1,11 @@
 import streamlit as st
-import asyncio
 import os
 import json
 import datetime
-# import nest_asyncio
-from PIL import Image, ImageOps, ImageDraw
-from streamlit.components.v1 import html
+from PIL import Image
 import requests
 from dotenv import load_dotenv
 from uuid import uuid4
-
-load_dotenv('../.env')
 
 # =========================== Function Definition =========================
 
@@ -30,116 +25,53 @@ def add_log(message: str):
     print(log_message)
 
 
-# def process_query_n8n(query: str) -> str:
-#     add_log('Sending query to n8n workflow')
-#     try:
-#         response = requests.post(
-#             os.getenv('N8N_WEBHOOK_TEST_HOST'),
-#             json={
-#                 "message": query,
-#                 "context": st.session_state.get("context", {}),
-#                 "conversation_id": st.session_state.active_chat
-#             },
-#             timeout=30
-#         )
-#         response.raise_for_status()
-#         result = response.json()
-#         add_log('Received response from n8n')
-
-#         if 'output' in result[0]:
-#             st.session_state.context = result[0]['output']
-
-#         return result[0].get('output', 'No response received')
-#     except Exception as e:
-#         add_log(f'Error calling n8n: {str(e)}')
-#         return "Sorry, I encountered an error processing your request."
-
-
 def process_query_n8n(query: str) -> str:
     add_log('Sending query to n8n workflow')
-    try:
-        # Generate or use existing session ID
-        if 'sessionId' not in st.session_state:
-            st.session_state.sessionId = str(uuid4()).replace("-", "")[:32]
+    # try:
+    # Generate or use existing session ID
+    if 'sessionId' not in st.session_state:
+        st.session_state.sessionId = str(uuid4()).replace("-", "")[:32]
 
-        # Create the new payload structure
-        payload = [{
-            "sessionId": st.session_state.sessionId,
-            "action": "sendMessage",
-            "chatInput": query
-        }]
+    # Create the new payload structure
+    payload = {
+        "sessionId": st.session_state.sessionId,
+        "action": "sendMessage",
+        "chatInput": query
+    }
 
-        add_log(f"Sending payload: {json.dumps(payload, indent=2)}")
+    add_log(f"Sending payload: {json.dumps(payload, indent=2)}")
 
-        response = requests.post(
-            os.getenv('N8N_WEBHOOK_TEST_HOST'),
-            json=payload,  # Send the new format
-            timeout=30
-        )
-        response.raise_for_status()
-        result = response.json()
-        add_log(f'Received response: {json.dumps(result, indent=2)}')
+    response = requests.post(
+        os.getenv('N8N_WEBHOOK_TEST_HOST'),
+        json=payload,
+        timeout=30
+    )
+    print(response.content)
+    response.raise_for_status()
+    result = response.json()
+    add_log(f'Received response: {json.dumps(result, indent=2)}')
 
-        # Handle response - adjust based on your n8n's return format
-        if isinstance(result, list) and len(result) > 0:
-            return result[0].get('output', result[0].get('response', 'No response received'))
-        return str(result)
+    # Handle response - adjust based on your n8n's return format
+    if isinstance(result, list) and len(result) > 0:
+        return result[0].get('output', result[0].get('response', 'No response received'))
+    return str(result)
 
-    except Exception as e:
-        add_log(f'Error calling n8n: {str(e)}')
-        return "Sorry, I encountered an error processing your request."
+    # except Exception as e:
+    #     add_log(f'Error calling n8n: {str(e)}')
+    #     return "Sorry, I encountered an error processing your request."
 
-
-# async def handle_query(query: str):
-#     if query.strip().lower() == 'quit':
-#         st.session_state.conversations = {'default': []}
-#         st.session_state.context = {}
-#         st.session_state.active_chat = 'default'
-#         add_log('Conversation and context reset')
-#     else:
-#         # Store user message with additional metadata
-#         user_ts = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-#         user_msg = {
-#             'sender': 'User',
-#             'message': query,
-#             'timestamp': user_ts,
-#             'type': 'user_message'
-#         }
-
-#         # Initialize if not exists
-#         if st.session_state.active_chat not in st.session_state.conversations:
-#             st.session_state.conversations[st.session_state.active_chat] = {'default': []}
-
-#         # Add message to current conversation
-#         st.session_state.conversations[st.session_state.active_chat].append(user_msg)
-#         add_log(f'User query appended: {query}')
-
-#         # Rest of your handle_query logic...
-#         response_data = await process_query_n8n(query)
-
-#         # When adding the response:
-#         assistant_msg = {
-#             'sender': 'Assistant',
-#             'message': response_data.get('text', '') if isinstance(response_data, dict) else response_data,
-#             'timestamp': datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-#             'type': 'response'
-#         }
-#         st.session_state.conversations[st.session_state.active_chat].append(assistant_msg)
-
-#         st.session_state.query_executed = True
 
 def handle_query(query: str):
     if query.strip().lower() == 'quit':
         st.session_state.conversations = {'default': []}
         st.session_state.context = {}
         st.session_state.active_chat = 'default'
-        add_log('Conversation and context reset')
+        add_log('Conversation')
     else:
-        user_ts = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         user_msg = {
             'sender': 'User',
             'message': query,
-            'timestamp': user_ts,
+            'timestamp': datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
             'type': 'user_message'
         }
 
@@ -160,21 +92,21 @@ def handle_query(query: str):
         }
         st.session_state.conversations[st.session_state.active_chat].append(assistant_msg)
         st.session_state.query_executed = True
+        st.session_state.last_query = query
 
 
 # Set the submit_triggered flag when nter is pressed
 def submit_on_enter():
-    if st.session_state.query_input.strip():
+    if st.session_state.query_input.strip() and not st.session_state.get('prevent_rerun', False):
         st.session_state.submit_triggered = True
         st.session_state.pending_query = st.session_state.query_input
+        st.session_state.prevent_rerun = True
         st.session_state.query_input = ""
 
 
 # ===========================  Initialization =============================
-# Allow asyncio event loop reuse (Streamlit apps rerun on input changes)
-# nest_asyncio.apply()
 
-# load css
+load_dotenv('../.env')
 load_css()
 
 # Set Parameters
@@ -185,9 +117,6 @@ if 'conversations' not in st.session_state:
     st.session_state.conversations = {
         'default': []
     }
-
-if 'client_instance' not in st.session_state:
-    st.session_state.client_instance = None
 
 if 'logs' not in st.session_state:
     st.session_state.logs = []
@@ -204,21 +133,19 @@ if 'pending_query' not in st.session_state:
 if 'active_chat' not in st.session_state:
     st.session_state.active_chat = 'default'
 
-# if 'context' not in st.session_state:
-#     st.session_state.context = {
-#         'data_catalog_queries': [],
-#         'selected_models': {},
-#         'conversation_history': []
-#     }
-
 if 'sessionId' not in st.session_state:
     st.session_state.sessionId = str(uuid4()).replace("-", "")[:32]
 
 if 'conversation_modified' not in st.session_state:
     st.session_state.conversation_modified = False
 
-# ============================= UI ==================================
+if 'prevent_rerun' not in st.session_state:
+    st.session_state.prevent_rerun = False
 
+if 'last_query' not in st.session_state:
+    st.session_state.last_query = None
+
+# ============================= UI ==================================
 
 # Sidebar
 with st.sidebar:
@@ -325,19 +252,15 @@ st.text_input(
 send_button = st.button('Send')
 
 # ==================================== Main Trigger Logic ==============================
-
-# Check for send button or enter key press
-# if (send_button or st.session_state.submit_triggered) and not st.session_state.query_executed:
-#     query = st.session_state.pending_query.strip()
-#     if query:
-#         run_async_in_event_loop(handle_query(query))
-#         st.session_state.submit_triggered = False
-
 if (send_button or st.session_state.submit_triggered) and not st.session_state.query_executed:
     query = st.session_state.pending_query.strip()
     if query:
         handle_query(query)
         st.session_state.submit_triggered = False
+        st.session_state.prevent_rerun = False
+        st.session_state.pending_query = ""
+        # st.rerun()
+
 
 # Rerun app after query complete to refresh the UI
 if st.session_state.query_executed:
